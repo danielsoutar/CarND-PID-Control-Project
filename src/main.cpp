@@ -1,8 +1,11 @@
+#include <math.h>
 #include <uWS/uWS.h>
+#include <chrono>
 #include <iostream>
+#include <fstream>
+#include <thread>
 #include "json.hpp"
 #include "PID.h"
-#include <math.h>
 
 // for convenience
 using json = nlohmann::json;
@@ -28,19 +31,40 @@ std::string hasData(std::string s) {
   return "";
 }
 
-int main()
-{
+int main() {
   uWS::Hub h;
 
-  PID pid;
-  // TODO: Initialize the pid variable.
+  // Wanted to explore the parameter space.
+  // Would have systematically searched it by iterating over different
+  // combinations of Kp and Kd. Assume Ki fixed, at 0.001.
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+  // Starting from 0, 0, iterate over the combinations
+  // in multiples of 0.1 per parameter.
+
+  // int time_step = 0;
+  // double Kp_i = 0;
+  // double Kd_i = 0;
+  // const double Kp_step = 0.1;
+  // const double Kd_step = 0.1;
+  // const int MAX_KP = 10;
+  // const int MAX_KD = 10;
+  // const double MAX_CTE_THRESHOLD = 3.0;
+
+  // PID pid_only_proportional(0.3, 0.0, 0.0);
+  // PID pid_only_integral(0.0, 0.0, 0.001);
+  // PID pid_only_derivative(0.0, 5.0, 0.0);
+
+  PID pid_steer(0.3, 5, 0.001);
+  // pid_steer.RecordTotalError();
+  PID pid_throttle(0.45, 0.5, 0.0);
+
+  bool is_initialised = false;
+
+  h.onMessage([&pid_steer, &pid_throttle, &is_initialised](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
-    if (length && length > 2 && data[0] == '4' && data[1] == '2')
-    {
+    if (length && length > 2 && data[0] == '4' && data[1] == '2') {
       auto s = hasData(std::string(data).substr(0, length));
       if (s != "") {
         auto j = json::parse(s);
@@ -48,27 +72,64 @@ int main()
         if (event == "telemetry") {
           // j[1] is the data JSON object
           double cte = std::stod(j[1]["cte"].get<std::string>());
-          double speed = std::stod(j[1]["speed"].get<std::string>());
-          double angle = std::stod(j[1]["steering_angle"].get<std::string>());
           double steer_value;
-          /*
-          * TODO: Calcuate steering value here, remember the steering value is
-          * [-1, 1].
-          * NOTE: Feel free to play around with the throttle and speed. Maybe use
-          * another PID controller to control the speed!
-          */
+          double throttle;
+          double reference_velocity = 0.6;
+
+          if(!is_initialised) {
+            pid_steer.Init(cte);
+            steer_value = pid_steer.Respond(cte);
+            pid_throttle.Init(steer_value);
+            throttle = pid_throttle.RespondThrottle(fabs(steer_value), reference_velocity);
+            is_initialised = true;
+          }
+          else {
+            steer_value = pid_steer.Respond(cte);
+            throttle = pid_throttle.RespondThrottle(fabs(steer_value), reference_velocity);
+          }
+
+          // The below doesn't work - the simulator's latency between sending a reset message and said message
+          // actually feeding back appears to be the reason. I would have appended the results to a log file.
+          // I was actually just wanting to explore the parameter space. Alas, this simulator makes that
+          // needlessly difficult. Hopefully this project is changed so that it is easier to test out in Python
+          // before running the FINAL controller on the simulator. That would make much more sense.
+
+          // time_step += 1;
+          // if((fabs(cte) > MAX_CTE_THRESHOLD || time_step >= 24000)) {
+          //   // std::cout << ((fabs(cte) > MAX_CTE_THRESHOLD) == true) << ", " << ((time_step % 24000 == 0) == true) << std::endl;
+
+          //   if(fabs(cte) > MAX_CTE_THRESHOLD) {
+          //     my_logfile << pid_steer.K_coeffs[0] << ", " << pid_steer.K_coeffs[1] << ", " << 1e19 << std::endl;
+          //   }
+          //   else
+          //     my_logfile << pid_steer.K_coeffs[0] << ", " << pid_steer.K_coeffs[1] << ", " << pid_steer.GetTotalError() << std::endl;
+
+          //   // Need to set this so that total error is reset 
+          //   is_initialised = false;
+          //   pid_steer.SetParams(0, (Kp_i++ * Kp_step));
+          //   if(((Kp_i) * Kp_step) == MAX_KP) {
+          //     pid_steer.SetParams(0, 0.0);
+          //     pid_steer.SetParams(1, (Kd_i++ * Kd_step));
+          //   }
+
+          //   Restart(ws);
+          // }
+
+          // 0.6 is about as fast as it can go before things get too... wonky. 0.5 is safer and calmer though.
           
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
+          // my_logfile << cte << ", " << steer_value << std::endl;
+          // std::cout << "CTE (Throttle): " << cte << " Throttle Value: " << throttle << std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
+          msgJson["throttle"] = throttle;
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          // std::cout << msg << std::endl;
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
-      } else {
+      } 
+      else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
@@ -80,12 +141,10 @@ int main()
   // doesn't compile :-(
   h.onHttpRequest([](uWS::HttpResponse *res, uWS::HttpRequest req, char *data, size_t, size_t) {
     const std::string s = "<h1>Hello world!</h1>";
-    if (req.getUrl().valueLength == 1)
-    {
+    if (req.getUrl().valueLength == 1) {
       res->end(s.data(), s.length());
     }
-    else
-    {
+    else {
       // i guess this should be done more gracefully?
       res->end(nullptr, 0);
     }
@@ -101,12 +160,10 @@ int main()
   });
 
   int port = 4567;
-  if (h.listen(port))
-  {
+  if (h.listen(port)) {
     std::cout << "Listening to port " << port << std::endl;
   }
-  else
-  {
+  else {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }

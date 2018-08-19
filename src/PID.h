@@ -2,45 +2,49 @@
 #define PID_H
 
 class PID {
-public:
-  /*
-  * Errors
-  */
-  double p_error;
-  double i_error;
-  double d_error;
+    public:
 
-  /*
-  * Coefficients
-  */ 
-  double Kp;
-  double Ki;
-  double Kd;
+        const static int NUM_PARAMS = 3;
 
-  /*
-  * Constructor
-  */
-  PID();
+        /*
+        * Errors
+        */
+        double errors[NUM_PARAMS]; // p_error, d_error, i_error, in that order
 
-  /*
-  * Destructor.
-  */
-  virtual ~PID();
+        /*
+        * Coefficients
+        */ 
+        double K_coeffs[NUM_PARAMS];  // Kp, Kd, Ki, in that order
 
-  /*
-  * Initialize PID.
-  */
-  void Init(double Kp, double Ki, double Kd);
+        double prev_CTE;
+        double prev_angle;
 
-  /*
-  * Update the PID error variables given cross track error.
-  */
-  void UpdateError(double cte);
+        bool record_error;
+        double total_error;
 
-  /*
-  * Calculate the total PID error.
-  */
-  double TotalError();
+        PID();
+
+        PID(double Kp, double Kd, double Ki);
+
+        /*
+        * Destructor.
+        */
+        virtual ~PID();
+
+        void Init(double init_CTE);
+
+        void SetParams(int index, double value);
+        void UpdateParams(int index, double value);
+        void ResetParams();
+        void PrintParams();
+
+        void ResetErrors();
+
+        double Respond(double CTE);
+        double RespondThrottle(double angle, double max_velocity);
+
+        void RecordTotalError();
+        double GetTotalError();
 };
 
 #endif /* PID_H */
