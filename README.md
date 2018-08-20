@@ -5,7 +5,7 @@ Hello there, and welcome to my repo for implementing a PID controller to control
 
 Here I list some of the criteria for this project, as well as my reflections and general thoughts on it.
 
-## Describe the effect each of the P, I, D components had in your implementation.
+## Describe the effect each of the P, I, D components had in your implementation.
 
 NB: Note that the below videos use the final coefficients of the steering controller, with the other two switched off. The final controller is a PD controller with Kp = 0.3 and Kd = 5.0.
 
